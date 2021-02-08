@@ -1,5 +1,4 @@
 #!/usr/bin/python
-#Comment
 
 import os
 import sys
