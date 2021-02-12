@@ -51,7 +51,7 @@ class ramsStd(Peer):
         logging.debug("And look, I have my entire history available too:")
         logging.debug("look at the AgentHistory class in history.py for details")
         logging.debug(str(history))
-        """
+        
 
         requests = []   # We'll put all the things we want here
         # Symmetry breaking is good...
@@ -90,7 +90,7 @@ class ramsStd(Peer):
                 # you don't need to change the rest of this code
                 start_block = self.pieces[piece_id]
                 r = Request(self.id, peer.id, piece_id, start_block)
-                requests.append(r)
+                requests.append(r)"""
 
         return requests
 
