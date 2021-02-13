@@ -102,8 +102,10 @@ class ramsStd(Peer):
 
         returns: list of Upload objects.
 
-        In each round, this will be called after requests().
+        In each round, this will be called after requests()
         """
+
+        numSlots = min(4,len(requests))
 
         ##############################################################################
         # The code and suggestions here will get you started for the standard client #
@@ -129,14 +131,39 @@ class ramsStd(Peer):
             # The dummy client picks a single peer at random to unchoke.           #
             # You should decide a set of peers to unchoke accoring to the protocol #
             ########################################################################
-            request = random.choice(requests)
-            chosen = [request.requester_id]
+            unchokedPeers = list()
 
+            if len(requests) < 4:
+                for request in requests:
+                    unchokedPeers.add(request)
+            else:
+                # TODO: use history in grabbing download rates from peers from within the last 3 rounds
+                # TODO: instead of using bandwith from peers, use download rates from history
+                peerBandwiths = dict() # dictionary to hold peers by their id and their corresponding bandwith
+                for i in range(3):
+                    peerBandwiths[peers[i].id] = peer.up_bw
+
+                sortedPeerBandwiths = dict(sorted(peerBandwiths.items(), key=lambda item: item[1]))
+                #request = random.choice(requests)
+                
+
+                # for numSlots unchoke slots, get numSlots-1 peers that have the highest average download rate and add them to unchokedPeers
+                for peer_id, bandwith in sortedPeerBandwiths:
+                    for i in range(len(requests)):
+                        if requests[i].peer_id == peer_id:
+                            unchokedPeers.add(requests[i])
+
+
+                for i in len(requests):
+                    request = random.choice(requests)
+                    if !(request in unchokedPeers):
+                        unchokedPeers.add(request)
+                        break
 
             
             # Now that we have chosen who to unchoke, the standard client evenly shares
             # its bandwidth among them
-            bws = even_split(self.up_bw, len(chosen))
+            bws = even_split(self.up_bw, len(unchokedPeers))
 
         # create actual uploads out of the list of peer ids and bandwidths
         # You don't need to change this
