@@ -37,8 +37,7 @@ class ramsStd(Peer):
         np_set = set(needed_pieces)  # sets support fast intersection ops.
 
 
-        logging.debug("%s here: still need pieces %s" % (
-            self.id, needed_pieces))
+        # logging.debug("%s here: still need pieces %s" % (self.id, needed_pieces))
 
         #This code shows you what you have access to in peers and history
         #You won't need it in your final solution, but may want to uncomment it
@@ -51,6 +50,7 @@ class ramsStd(Peer):
         logging.debug("And look, I have my entire history available too:")
         logging.debug("look at the AgentHistory class in history.py for details")
         logging.debug(str(history))
+        """
         
 
         requests = []   # We'll put all the things we want here
@@ -63,6 +63,12 @@ class ramsStd(Peer):
         # you'll need to write the code to compute these yourself #
         ###########################################################
         frequencies = {}
+        for p in peers:
+            for piece in p.available_pieces:
+                if piece in frequencies:
+                    frequencies[piece] += 1
+                else:
+                    frequencies[piece] = 1
 
         
         # Python syntax to perform a sort using a user defined sort key
@@ -78,19 +84,14 @@ class ramsStd(Peer):
             av_set = set(peer.available_pieces)
             isect = av_set.intersection(np_set)
             n = min(self.max_requests, len(isect))
-            # More symmetry breaking -- ask for random pieces.
-            # You could try fancier piece-requesting strategies
-            # to avoid getting the same thing from multiple peers at a time.
-            for piece_id in random.sample(isect, int(n)):
-                # aha! The peer has this piece! Request it.
-                # which part of the piece do we need next?
-                # (must get the next-needed blocks in order)
-                #
-                # If you loop over the piece_ids you want to request above
-                # you don't need to change the rest of this code
-                start_block = self.pieces[piece_id]
-                r = Request(self.id, peer.id, piece_id, start_block)
-                requests.append(r)"""
+            dict1 = {}
+            minList = []
+            for i in isect:
+                dict1[i] = frequencies[i]
+            for i in range(int(n)):
+                temp = min(dict1, key=dict1.get)
+                minList.append(temp)
+                del dict1[temp]
 
         return requests
 
