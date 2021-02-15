@@ -93,6 +93,11 @@ class ramsStd(Peer):
                 minList.append(temp)
                 del dict1[temp]
 
+        for id in minList:
+            starting_block = self.pieces[id]
+            r = Request(self.id, peer.id, id, starting_block)
+            requests.append(r)
+
         return requests
 
     def idChecker(self, currentDownload):
