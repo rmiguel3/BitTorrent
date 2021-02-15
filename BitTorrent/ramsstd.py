@@ -220,9 +220,9 @@ class ramsStd(Peer):
                                 break
 
             
-        # Now that we have chosen who to unchoke, the standard client evenly shares
-        # its bandwidth among them
-        bws = even_split(self.up_bw, len(chosen))
+            # Now that we have chosen who to unchoke, the standard client evenly shares
+            # its bandwidth among them
+            bws = even_split(self.up_bw, len(chosen))
 
         # create actual uploads out of the list of peer ids and bandwidths
         # You don't need to change this
