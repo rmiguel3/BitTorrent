@@ -37,12 +37,12 @@ class ramsStd(Peer):
         np_set = set(needed_pieces)  # sets support fast intersection ops.
 
 
-        # logging.debug("%s here: still need pieces %s" % (self.id, needed_pieces))
+        logging.debug("%s here: still need pieces %s" % (self.id, needed_pieces))
 
         #This code shows you what you have access to in peers and history
         #You won't need it in your final solution, but may want to uncomment it
         #and see what it does to help you get started
-        """
+        
         logging.debug("%s still here. Here are some peers:" % self.id)
         for p in peers:
             logging.debug("id: %s, available pieces: %s" % (p.id, p.available_pieces))
@@ -50,7 +50,7 @@ class ramsStd(Peer):
         logging.debug("And look, I have my entire history available too:")
         logging.debug("look at the AgentHistory class in history.py for details")
         logging.debug(str(history))
-        """
+        
         
 
         requests = []   # We'll put all the things we want here
@@ -95,6 +95,12 @@ class ramsStd(Peer):
 
         return requests
 
+    def idChecker(self, currentDownload):
+        if (self.id == currentDownload.to_id):
+            return True
+
+        return False
+
     def uploads(self, requests, peers, history):
         """
         requests -- a list of the requests for this peer for this round
@@ -105,8 +111,7 @@ class ramsStd(Peer):
 
         In each round, this will be called after requests()
         """
-
-        numSlots = min(4,len(requests))
+        #self.id
 
         ##############################################################################
         # The code and suggestions here will get you started for the standard client #
@@ -119,7 +124,7 @@ class ramsStd(Peer):
         # One could look at other stuff in the history too here.
         # For example, history.downloads[round-1] (if round != 0, of course)
         # has a list of Download objects for each Download to this peer in
-        # the previous round.
+        # the previous round
 
         if len(requests) == 0:
             logging.debug("No one wants my pieces!")
@@ -132,39 +137,87 @@ class ramsStd(Peer):
             # The dummy client picks a single peer at random to unchoke.           #
             # You should decide a set of peers to unchoke accoring to the protocol #
             ########################################################################
-            unchokedPeers = list()
+            chosen = [] # list to hold all of the peers
 
+            # number of requests is less than 4, so unchoke all peers
             if len(requests) < 4:
                 for request in requests:
-                    unchokedPeers.add(request)
-            else:
-                # TODO: use history in grabbing download rates from peers from within the last 3 rounds
-                # TODO: instead of using bandwith from peers, use download rates from history
-                peerBandwiths = dict() # dictionary to hold peers by their id and their corresponding bandwith
-                for i in range(3):
-                    peerBandwiths[peers[i].id] = peer.up_bw
+                    chosen.add(request)
+            # number of requests is 4 or more, so unchoke the top 3 peers
+            else: 
+                # two lists, holding the download lists for the last three rounds
+                recentDownloads1 = []
+                recentDownloads2 = []
 
-                sortedPeerBandwiths = dict(sorted(peerBandwiths.items(), key=lambda item: item[1]))
-                #request = random.choice(requests)
+                # first round, so randomly unchoke
+                if round == 0:
+                    # grab one peer at random and add it to chosen if it's not a duplicate peer
+                    for i in len(requests):
+                        if len(chosen) == 3:
+                            break
+
+                        request = random.choice(requests)
+                        if request not in chosen:
+                            chosen.append(request)
                 
+                # second round, so decide first 3 unchokes just based off the last round
+                elif round == 1:
+                    # grab the list of downloads from the last round
+                    recentDownloads1 = history.downloads[round-1]
 
-                # for numSlots unchoke slots, get numSlots-1 peers that have the highest average download rate and add them to unchokedPeers
-                for peer_id, bandwith in sortedPeerBandwiths:
-                    for i in range(len(requests)):
-                        if requests[i].peer_id == peer_id:
-                            unchokedPeers.add(requests[i])
+                    # filter so that the only Download objects are the one where to_id == self.id
+                    recentDownloads1 = history.downloads[round-1]
 
+                    # sort based on blocks downloaded
+                    recentDownloads1.sort(key=lambda x: x.blocks, reverse=True)
 
-                for i in len(requests):
-                    request = random.choice(requests)
-                    if !(request in unchokedPeers):
-                        unchokedPeers.add(request)
-                        break
+                    # add the requests to chosen that correspond to the to_id of the 3 Download objects that have the highest number of blocks downloaded
+                    for download in recentDownloads1:
+                        # max number of requests to unchoke reached
+                        if len(chosen) == 3:
+                            break
+
+                        for i in range(len(requests)):
+                            if requests[i].peer_id == download.from_id:
+                                chosen.append(requests[i])
+
+                # third round or later, so decide based off last 2 rounds
+                else:
+                    # grab the list of downloads from the last 2 rounds
+                    recentDownloads1 = history.downloads[round-1]
+                    recentDownloads2 = history.downloads[round-2]
+                
+                    # for each downloads list, filter so that the only Download objects are the one where to_id == self.id
+                    recentDownloads1 = filter(self.idChecker, recentDownloads1)
+                    recentDownloads2 = filter(self.idChecker, recentDownloads2)
+
+                    # add all the Download objects to a new list, sort based on blocks downloaded
+                    allRecentDownloads = recentDownloads1 + recentDownloads2
+                    allRecentDownloads.sort(key=lambda x: x.blocks, reverse=True)
+
+                    # add the requests to chosen that correspond to the to_id of the 3 Download objects that have the highest number of blocks downloaded
+                    for download in allRecentDownloads:
+                        # max number of requests to unchoke reached
+                        if len(chosen) == 3:
+                            break
+
+                        for i in range(len(requests)):
+                            if requests[i].peer_id == download.from_id:
+                                chosen.append(requests[i])
+                    
+                    # 3 rounds have passed, so get an optimistic unchoke
+                    if round+1 % 3 == 0:
+                        # grab one peer at random and add it to chosen if it's not a duplicate peer
+                        for i in len(requests):
+                            request = random.choice(requests)
+                            if request not in chosen:
+                                chosen.append(request)
+                                break
 
             
-            # Now that we have chosen who to unchoke, the standard client evenly shares
-            # its bandwidth among them
-            bws = even_split(self.up_bw, len(unchokedPeers))
+        # Now that we have chosen who to unchoke, the standard client evenly shares
+        # its bandwidth among them
+        bws = even_split(self.up_bw, len(chosen))
 
         # create actual uploads out of the list of peer ids and bandwidths
         # You don't need to change this
