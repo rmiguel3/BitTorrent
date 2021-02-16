@@ -131,7 +131,7 @@ class ramsStd(Peer):
         # the previous round
 
         chosen = [] # list to hold all of the peers to be unchoked
-        bws = [] # list to hold the allocated bandwith of the client for each unchoked peer
+        bws = [] # list to hold the allocated bandwidth of the client for each unchoked peer
 
         if len(requests) == 0:
             logging.debug("No one wants my pieces!")
@@ -176,14 +176,14 @@ class ramsStd(Peer):
                     # sort based on blocks downloaded
                     recentDownloads1.sort(key=lambda x: x.blocks, reverse=True)
 
-                    # add the requests to chosen that correspond to the to_id of the 3 Download objects that have the highest number of blocks downloaded
+                    # add the requests to chosen that correspond to the from_id of the 3 Download objects that have the highest number of blocks downloaded
                     for download in recentDownloads1:
                         # max number of requests to unchoke reached
                         if len(chosen) == 3:
                             break
 
                         for i in range(len(requests)):
-                            if requests[i].peer_id == download.from_id:
+                            if requests[i].requester_id == download.from_id:
                                 chosen.append(requests[i])
 
                 # third round or later, so decide based off last 2 rounds
@@ -200,14 +200,14 @@ class ramsStd(Peer):
                     allRecentDownloads = recentDownloads1 + recentDownloads2
                     allRecentDownloads.sort(key=lambda x: x.blocks, reverse=True)
 
-                    # add the requests to chosen that correspond to the to_id of the 3 Download objects that have the highest number of blocks downloaded
+                    # add the requests to chosen that correspond to the from_id of the 3 Download objects that have the highest number of blocks downloaded
                     for download in allRecentDownloads:
                         # max number of requests to unchoke reached
                         if len(chosen) == 3:
                             break
 
                         for i in range(len(requests)):
-                            if requests[i].peer_id == download.from_id:
+                            if requests[i].requester_id == download.from_id:
                                 chosen.append(requests[i])
                     
                     # 3 rounds have passed, so get an optimistic unchoke
@@ -226,9 +226,6 @@ class ramsStd(Peer):
         else:
             bws = even_split(self.up_bw, len(chosen))
 
-        # shuffle bws for symmetry breaking purposes
-        random.shuffle(bws)
-        
         # create actual uploads out of the list of peer ids and bandwidths
         # You don't need to change this
         uploads = [Upload(self.id, peer_id, bw)

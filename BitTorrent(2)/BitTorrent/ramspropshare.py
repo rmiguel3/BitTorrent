@@ -132,136 +132,79 @@ class ramsPropShare(Peer):
         # the previous round
 
         chosen = [] # list to hold all of the peers to be unchoked
-        bws = [] # list to hold the allocated bandwith of the client for each unchoked peer
+        bws = [] # list to hold the allocated bandwidth of the client for each unchoked peer
 
         if len(requests) == 0:
             logging.debug("No one wants my pieces!")
         else:
             logging.debug("Still here: uploading to a random peer")
 
-            ########################################################################
-            # The dummy client picks a single peer at random to unchoke.           #
-            # You should decide a set of peers to unchoke accoring to the protocol #
-            ########################################################################
+            # first round, so just split bandwidth evenly among all peers
+            if round == 0:
+                bws = even_split(self.up_bw, len(requests))
+                
+                chosen = requests
 
-            # number of requests is less than 4, so unchoke all peers
-            if len(requests) < 4:
+            # second round or later, so the propshare client proportionally shares its bandwidth across its peers
+            else:
+                # get a set of the peers that the client received blocks from last round 
+                downloadedPeers = set()
+                for download in history.downloads[round-1]:
+                    if download.to_id == self.id:
+                        downloadedPeers.add(download.from_id) 
+
+                # get a list of the peers that are requesting blocks from the client this round
+                requestingPeers = set()
                 for request in requests:
-                    chosen.add(request)
-            # number of requests is 4 or more, so unchoke the top 3 peers
-            else: 
-                # two lists, holding the download lists for the last three rounds
-                recentDownloads1 = []
-                recentDownloads2 = []
+                    requestingPeers.add(request.peer_id)
 
-                # first round, so randomly unchoke
-                if round == 0:
-                    # grab one peer at random and add it to chosen if it's not a duplicate peer
-                    for i in len(requests):
-                        if len(chosen) == 3:
-                            break
+                # Compare both sets and create two lists (and a dictionary): #
+                    # list that holds peers that the client received blocks from last round and are requesting blocks from the client this round
+                    # dictionary that holds the total amount of blocks downloaded from each preferred peer
+                    preferredPeers = []
+                    downloadedBlocks = dict()
+                    for peer in downloadedPeers:
+                        if peer in requestingPeers:
+                            preferredPeers.append(peer)
+                            downloadedBlocks[peer] = 0
 
-                        request = random.choice(requests)
-                        if request not in chosen:
-                            chosen.append(request)
-                
-                # second round, so decide first 3 unchokes just based off the last round
-                elif round == 1:
-                    # grab the list of downloads from the last round
-                    recentDownloads1 = history.downloads[round-1]
-
-                    # filter so that the only Download objects are the one where to_id == self.id
-                    recentDownloads1 = filter(self.idChecker, recentDownloads1)
-
-                    # sort based on blocks downloaded
-                    recentDownloads1.sort(key=lambda x: x.blocks, reverse=True)
-
-                    # add the requests to chosen that correspond to the to_id of the 3 Download objects that have the highest number of blocks downloaded
-                    for download in recentDownloads1:
-                        # max number of requests to unchoke reached
-                        if len(chosen) == 3:
-                            break
-
-                        for i in range(len(requests)):
-                            if requests[i].peer_id == download.from_id:
-                                chosen.append(requests[i])
-
-                # third round or later, so decide based off last 2 rounds
-                else:
-                    # grab the list of downloads from the last 2 rounds
-                    recentDownloads1 = history.downloads[round-1]
-                    recentDownloads2 = history.downloads[round-2]
-                
-                    # for each downloads list, filter so that the only Download objects are the one where to_id == self.id
-                    recentDownloads1 = filter(self.idChecker, recentDownloads1)
-                    recentDownloads2 = filter(self.idChecker, recentDownloads2)
-
-                    # add all the Download objects to a new list, sort based on blocks downloaded
-                    allRecentDownloads = recentDownloads1 + recentDownloads2
-                    allRecentDownloads.sort(key=lambda x: x.blocks, reverse=True)
-
-                    # add the requests to chosen that correspond to the to_id of the 3 Download objects that have the highest number of blocks downloaded
-                    for download in allRecentDownloads:
-                        # max number of requests to unchoke reached
-                        if len(chosen) == 3:
-                            break
-
-                        for i in range(len(requests)):
-                            if requests[i].peer_id == download.from_id:
-                                chosen.append(requests[i])
+                    # list that holds peers that the client did NOT receive blocks from last round and are requesting blocks from the client this round
+                    optimisticPeers = []
+                    for peer in requestingPeers:
+                        if peer not in downloadedPeers:
+                            optimisticPeers.append(peer)
                     
-                    # 3 rounds have passed, so get an optimistic unchoke
-                    if round+1 % 3 == 0:
-                        # grab one peer at random and add it to chosen if it's not a duplicate peer
-                        for i in len(requests):
-                            request = random.choice(requests)
-                            if request not in chosen:
-                                chosen.append(request)
-                                break
+                    # add the requests of the preferred peers to chosen
+                    for request in requests:
+                        if request.requester_id in preferredPeers:
+                            chosen.append(request)
+                    
+                    # grab one optimistic peer at random and add it to chosen 
+                    for request in requests:
+                        optimisticUnchoke = random.choice(optimisticPeers)
+                        if optimisticUnchoke == request.requester_id:
+                            chosen.append(optimisticUnchoke)
+                            break
 
-            
-            # Now that we have chosen who to unchoke, the propshare client proportionally shares its bandiwth across its peers
-            
-            # get a list of the peers that the client received blocks from last round
-            downloadedPeers = set()
-            for download in history.downloads[round-1]:
-                if download.to_id == self.id:
-                    downloadedPeers.add(download.to_id)
+                # get the total number of blocks downloaded across all preferred peers, and the total number of blocks downloaded from each specific preferred peer
+                totalBlocksFromPreferred = 0
+                for download in history.downloads[round-1]:
+                    if download.from_id in preferredPeers:
+                        totalBlocksFromPreferred+= download.blocks
+                        downloadedBlocks[download.from_id]+= download.blocks
 
-            # get a list of the peers that are requesting pieces from the client this round
-            requestingPeers = set()
-            for request in requests:
-                requestingPeers.add(request.peer_id)
+                # allocate the client's bandwidth for each preferred peer, proportional to the amount of blocks the client downloaded from the peer
+                for peer in preferredPeers:
+                    proportionOfbandwidth = (downloadedBlocks[peer] / totalBlocksFromPreferred * .90)
+                    bws.append(proportionOfbandwidth)
 
-            # compare both lists and create two new lists:
-                # peers that the client received blocks from last round and are requesting from the client this round
-                preferredPeers = []
+                # allocate a constant 10% of the client's bandwidth for the optimistic unchoke
+                bws.append(.10 * self.up_bw)
 
-                for peer in downloadedPeers:
-                    if peer in requestingPeers:
-                        preferredPeers.append(peer)
-                # peers that the client did NOT receive blocks from last round and are requesting from the client this round
-                optimisticPeers = []
-
-                for peer in requestingPeers:
-                    if peer not in downloadedPeers:
-                        optimisticPeers.append(peer)
-
-            # allocate bandwith proportionally for each preferred peer
-            totalBlocksFromPreferred = 0
-
-            # get the total number of blocks downloaded from preferred peers
-            for download in downloadedPeers:
-                if download.from_id in preferredPeers:
-                    totalBlocksFromPreferred+= download.blocks_per_piece
-
-            
-
-            # allocate 10% bandwith for the optimistic unchoke
 
         # create actual uploads out of the list of peer ids and bandwidths
         # You don't need to change this
         uploads = [Upload(self.id, peer_id, bw)
-                   for (peer_id, bw) in zip(chosen, bws)]
+                for (peer_id, bw) in zip(chosen, bws)]
             
         return uploads
